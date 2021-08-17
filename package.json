@@ -1,0 +1,17 @@
+{
+  "name": "broadcastsrv",
+  "version": "1.0.0",
+  "description": "testowe api do wysylania broadcastow",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "broadcast",
+    "api",
+    "ifter"
+  ],
+  "author": "Henio",
+  "license": "ISC",
+  "dependencies": {}
+}
