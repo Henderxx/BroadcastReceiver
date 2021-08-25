@@ -13,5 +13,8 @@
   ],
   "author": "Henio",
   "license": "ISC",
-  "dependencies": {}
+  "dependencies": {
+    "libnmap": "^0.4.19",
+    "network": "^0.5.0"
+  }
 }
