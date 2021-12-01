@@ -1,13 +1,75 @@
 const PORT = '9000'
 const MCAST_ADDR = '239.255.255.250'
 const dgram = require('dgram')
+const net = require('net')
 const fs = require('fs')
 const sourceFile = '/etc/network/interfaces'
 //const sourceFile = __dirname+'/interfaces'
 const backupFile = __dirname+'/backup/interfaces.bak'
+const logFile = __dirname+'/logs/connections.log'
 const { exec }= require('child_process')
-const { stderr, stdout } = require('process')
+const mysql = require('mysql')
 let readyIntFile = {}
+//let Person = ''
+
+
+const db = mysql.createConnection({
+    //host: '192.168.0.26',
+    socketPath: '/run/mysql/mysql.sock',
+    user: 'ifter',
+    password: 'ifter',
+    database: 'sysora'
+})
+
+db.connect(function(err){
+    if (err) {
+        console.log(`Błąd połączenia z bazą: ${err.stack}`)
+        return
+    }
+    console.log(`połączono z bazą jako id: ${db.threadId}`);
+})
+const localReceiver = net.createServer()
+
+localReceiver.on('connection', (socket) => {
+    const newClient = `${socket.remoteAddress}:${socket.remotePort}`
+    console.log(`Nowe połączenie: ${newClient}`)
+
+    socket.on('data',async (data) => {
+        console.log(data)
+        //zapis do pliku czas + otrzymany pakiet
+        saveReceivedDataLog(data)
+        //Person = ''
+        const Txt = data.toString('utf8')
+        console.log(`Text --- ${Txt}`);
+        try {
+            await getPersons(Txt,socket)
+            //socket.write(Person)
+        } catch (error) {
+            console.log(error);
+        }
+        
+    })
+
+    socket.on('close', () => {
+        console.log(`Connection closed`);
+    })
+
+    socket.on('error', (err) => {
+        console.log(err.message);
+    })
+}) 
+
+
+localReceiver.on('error', (err) =>{
+    throw err
+})
+
+
+localReceiver.listen(9000, () =>
+console.log(`server bound`)
+)
+
+
 
 const receiver = dgram.createSocket({type: 'udp4', reuseAddr: true})
 
@@ -43,6 +105,7 @@ receiver.on('message',async (msg, rinfo) => {
             })
             break
         case 'setip':
+            //setip 192.168.0.26 netmask 255.255.255.0 gateway 192.168.0.1
             const newIp = receivedPacket[1]
             const newNetmask = receivedPacket[3]
             const newGateway = receivedPacket[5]
@@ -54,10 +117,12 @@ receiver.on('message',async (msg, rinfo) => {
         case 'reboot':
             await goReboot()
             break
+
         default:
-            receiver.send(`Ping pong ping`, rinfo.port, MCAST_ADDR,(error,bytes)=> {
-                if(error) return console.log(error.stack)
-            })
+            // receiver.send(`Ping pong ping`, rinfo.port, MCAST_ADDR,(error,bytes)=> {
+            //     if(error) return console.log(error.stack)
+            // })
+            console.log(receivedPacket);
             break
     }
 })
@@ -119,4 +184,45 @@ function goBackupInterfaces(){
 }
 function raisErr(err){
     if (err) throw err
+}
+async function getPersons(cardId, socket) {
+    const query = `SELECT person.name FROM card join person on person.id = card.personid where physid=${cardId}`
+    db.query(query ,( error, results,fields) => {
+        if (error) throw error
+    const Person = results[0].name
+        console.log(`Result: ${results[0].name}`);
+    socket.write(Person)
+    //zapis do pliku czasu wysłanego pakietu
+    saveSendDataLog(Person)
+    })
+}
+
+
+
+function saveReceivedDataLog(data){
+    const date = new Date()
+    const year = date.getFullYear()
+    const month = date.getMonth() +1
+    const day = date.getDate()
+    const HH = date.getHours()
+    const MM = date.getMinutes()
+    const SS = date.getSeconds()
+
+    const result = `${year}.${month}.${day}-${HH}:${MM}:${SS} Received Data >> ${data} \r\n`
+
+    fs.writeFile(logFile,result,{encoding: 'utf-8', 'flag': 'a'},raisErr)
+}
+
+function saveSendDataLog(data){
+    const date = new Date()
+    const year = date.getFullYear()
+    const month = date.getMonth() +1
+    const day = date.getDate()
+    const HH = date.getHours()
+    const MM = date.getMinutes()
+    const SS = date.getSeconds()
+
+    const result = `${year}.${month}.${day}-${HH}:${MM}:${SS} Send Data << ${data} \r\n`
+
+    fs.writeFile(logFile,result,{encoding: 'utf-8','flag': 'a'},raisErr)
 }
