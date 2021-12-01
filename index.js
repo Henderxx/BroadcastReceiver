@@ -3,19 +3,20 @@ const MCAST_ADDR = '239.255.255.250'
 const dgram = require('dgram')
 const net = require('net')
 const fs = require('fs')
-const sourceFile = '/etc/network/interfaces'
-//const sourceFile = __dirname+'/interfaces'
+//const sourceFile = '/etc/network/interfaces'
+const sourceFile = __dirname+'/interfaces'
 const backupFile = __dirname+'/backup/interfaces.bak'
 const logFile = __dirname+'/logs/connections.log'
 const { exec }= require('child_process')
 const mysql = require('mysql')
 let readyIntFile = {}
+let existingCards = {}
 //let Person = ''
 
 
 const db = mysql.createConnection({
-    //host: '192.168.0.26',
-    socketPath: '/run/mysql/mysql.sock',
+    host: '192.168.0.26',
+    //socketPath: '/run/mysql/mysql.sock',
     user: 'ifter',
     password: 'ifter',
     database: 'sysora'
@@ -42,8 +43,18 @@ localReceiver.on('connection', (socket) => {
         const Txt = data.toString('utf8')
         console.log(`Text --- ${Txt}`);
         try {
-            await getPersons(Txt,socket)
+            if(existingCards[Txt]) {
+                console.log(existingCards[Txt]);
+                socket.write(existingCards[Txt])
+            }
+            else {
+                console.log(`Nie znaleziono wpisu w pamięci, ponowne odczytywanie bazy`);
+                socket.write(`False`)
+                await getExistingCards()
+            }
+            //await getPersons(Txt,socket)
             //socket.write(Person)
+            
         } catch (error) {
             console.log(error);
         }
@@ -87,9 +98,10 @@ receiver.on('error', (err) => {
     console.log(`receiver error: \n ${err.stack}`);
     receiver.close()
 })
-receiver.once('listening', () =>{
+receiver.once('listening', async () =>{
     readInterfaces()
     goBackupInterfaces()
+    await getExistingCards()
 })
 
 receiver.on('message',async (msg, rinfo) => {
@@ -225,4 +237,18 @@ function saveSendDataLog(data){
     const result = `${year}.${month}.${day}-${HH}:${MM}:${SS} Send Data << ${data} \r\n`
 
     fs.writeFile(logFile,result,{encoding: 'utf-8','flag': 'a'},raisErr)
+}
+
+function getExistingCards() {
+    const query = 'select person.name,card.physid from card join person on person.id = card.personid'
+    db.query(query, (error, results, fields) => {
+        if (error) {
+            throw error
+        }
+    for (const res of results) {
+        existingCards[res.physid] = res.name
+    }
+    // console.log(`Results: ${results}`);
+    console.log(JSON.stringify(existingCards));
+    })
 }
