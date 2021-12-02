@@ -3,20 +3,21 @@ const MCAST_ADDR = '239.255.255.250'
 const dgram = require('dgram')
 const net = require('net')
 const fs = require('fs')
-//const sourceFile = '/etc/network/interfaces'
-const sourceFile = __dirname+'/interfaces'
+const sourceFile = '/etc/network/interfaces'
+//const sourceFile = __dirname+'/interfaces'
 const backupFile = __dirname+'/backup/interfaces.bak'
 const logFile = __dirname+'/logs/connections.log'
 const { exec }= require('child_process')
 const mysql = require('mysql')
 let readyIntFile = {}
 let existingCards = {}
+let lastPersonId = ''
 //let Person = ''
 
 
 const db = mysql.createConnection({
-    host: '192.168.0.26',
-    //socketPath: '/run/mysql/mysql.sock',
+    //host: '192.168.0.26',
+    socketPath: '/run/mysql/mysql.sock',
     user: 'ifter',
     password: 'ifter',
     database: 'sysora'
@@ -41,22 +42,22 @@ localReceiver.on('connection', (socket) => {
         saveReceivedDataLog(data)
         //Person = ''
         const Txt = data.toString('utf8')
-        console.log(`Text --- ${Txt}`);
+        console.log(`Text --- ${Txt}`)
         try {
             if(existingCards[Txt]) {
-                console.log(existingCards[Txt]);
+                console.log(`Jest karta w pamięci`)
                 socket.write(existingCards[Txt])
             }
             else {
-                console.log(`Nie znaleziono wpisu w pamięci, ponowne odczytywanie bazy`);
+                console.log(`Nie znaleziono wpisu w pamięci, ponowne odczytywanie bazy`)
                 socket.write(`False`)
-                await getExistingCards()
+                await getMoreCards()
             }
             //await getPersons(Txt,socket)
             //socket.write(Person)
             
         } catch (error) {
-            console.log(error);
+            console.log(error)
         }
         
     })
@@ -239,16 +240,38 @@ function saveSendDataLog(data){
     fs.writeFile(logFile,result,{encoding: 'utf-8','flag': 'a'},raisErr)
 }
 
-function getExistingCards() {
-    const query = 'select person.name,card.physid from card join person on person.id = card.personid'
+async function getExistingCards() {
+    const query = 'select person.id,person.name,card.physid from card join person on person.id = card.personid limit 100000'
     db.query(query, (error, results, fields) => {
         if (error) {
             throw error
         }
+    let personIds = []
     for (const res of results) {
         existingCards[res.physid] = res.name
+        personIds.push(Number(res.id))
     }
+    lastPersonId = Math.max(...personIds)
+ console.log('poszlo')
+ console.log(`Max id: ${lastPersonId}`)
     // console.log(`Results: ${results}`);
-    console.log(JSON.stringify(existingCards));
+    // console.log(JSON.stringify(existingCards));
     })
+}
+
+async function getMoreCards() {
+    const query = `select person.id,person.name,card.physid from card join person on person.id = card.personid where person.id > ${lastPersonId} limit 10000`
+    db.query(query, (error, results, fields) => {
+        if (error) {
+            throw error
+        }
+    let personIds =[]
+    for (const res of results) {
+        existingCards[res.physid] = res.name
+        personIds.push(Number(res.id))
+    }
+    lastPersonId = Math.max(...personIds)
+    console.log('poszlo doczytanie')
+ console.log(`Max id: ${lastPersonId}`)
+})
 }
