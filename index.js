@@ -4,11 +4,8 @@ const MCAST_ADDR = '239.255.255.250'
 const dgram = require('dgram')
 const net = require('net')
 const mysql = require('mysql')
-
-let existingCards = commands.existingCards
-let lastPersonId = ''
-
-
+let existingCards = {}
+let lastPersonId = '' || 0
 const db = mysql.createConnection({
     host: '192.168.0.26',
     //socketPath: '/run/mysql/mysql.sock',
@@ -24,6 +21,7 @@ db.connect(function(err){
     }
     console.log(`połączono z bazą jako id: ${db.threadId}`);
 })
+
 const localReceiver = net.createServer()
 
 localReceiver.on('connection', (socket) => {
@@ -45,9 +43,15 @@ localReceiver.on('connection', (socket) => {
             else {
                 console.log(`Nie znaleziono wpisu w pamięci, ponowne odczytywanie bazy`)
                 socket.write(`False`)
-                await commands.getMoreCards(lastPersonId,db)
+                try {
+                    await commands.getMoreCards(db,lastPersonId,(error,data) => {
+                        existingCards = data.existingCards
+                        lastPersonId = data.personIds
+                    })    
+                } catch (error) {
+                    console.log(error);
+                }
             }
-            
         } catch (error) {
             console.log(error)
         }
@@ -74,7 +78,7 @@ console.log(`server bound`)
 )
 
 
-
+//let {existingCards, lastPersonId} = commands.getExistingCards(db)
 const receiver = dgram.createSocket({type: 'udp4', reuseAddr: true})
 
 receiver.bind(PORT, () => {
@@ -92,9 +96,17 @@ receiver.on('error', (err) => {
     receiver.close()
 })
 receiver.once('listening', async () =>{
-    commands.readInterfaces()
-    commands.goBackupInterfaces()
-    await commands.getExistingCards(db)
+    try {
+        commands.readInterfaces()
+        commands.goBackupInterfaces()
+        await commands.getExistingCards(db,(error,data) => {
+            existingCards = data.existingCards
+            lastPersonId = data.personIds
+        })
+    } catch (error) {
+        console.log(error);
+    }
+    
 })
 
 receiver.on('message',async (msg, rinfo) => {

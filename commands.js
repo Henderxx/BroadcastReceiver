@@ -6,46 +6,46 @@ const backupFile = __dirname+'/backup/interfaces.bak'
 const { exec }= require('child_process')
 
 module.exports = {
-    existingCards: {},
+   // existingCards: {},
     readyIntFile: {},
+   // lastPersonId: 0,
 
-    getExistingCards: async function getExistingCards(db) {
-        const query = 'select person.id,person.name,card.physid from card join person on person.id = card.personid limit 100000'
-        db.query(query, (error, results, fields) => {
-            if (error) {
-                throw error
-            }
+    getExistingCards: async function getExistingCards(db, callback) {
+        const query = 'select person.id,person.name,card.physid from card join person on person.id = card.personid limit 10'
         let personIds = []
-        for (const res of results) {
-            this.existingCards[res.physid] = res.name
-            personIds.push(Number(res.id))
-        }
-        lastPersonId = Math.max(...personIds)
-        console.log('poszlo')
-        console.log(`Max id: ${lastPersonId}`)
-        return lastPersonId
-        // console.log(`Results: ${results}`);
-        // console.log(JSON.stringify(existingCards));
+        let existingCards = {}
+            await this.queryDatabase(db,query,(error,data) => {
+                //console.log(data);
+                for(const row of data) {
+                    existingCards[row.physid] = row.name
+                    personIds.push(Number(row.id))
+                }
+            })
+        console.log(`initial odczyt kart`);
+        callback(null,{existingCards,personIds})
+    },
+
+    queryDatabase: async function queryDatabase(db,query,callback) {
+            await db.query(query,(error,results) =>{
+            if(error) return callback(error,null)
+            return callback(null,results)
         })
     },
 
-    getMoreCards : async function getMoreCards(lastPersonId,db) {
-        const query = `select person.id,person.name,card.physid from card join person on person.id = card.personid where person.id > ${lastPersonId} limit 10000`
-        db.query(query, (error, results, fields) => {
-            if (error) {
-                throw error
-            }
+    getMoreCards : async function getMoreCards(db,lastPersonId,callback) {
+        const PersonId = Math.max(...lastPersonId)
+        const query = `select person.id,person.name,card.physid from card join person on person.id = card.personid where person.id > ${PersonId} limit 5`
         let personIds =[]
-        for (const res of results) {
-            this.existingCards[res.physid] = res.name
-            personIds.push(Number(res.id))
-        }
-        console.log('poszlo doczytanie')
-        console.log(`Max id: ${lastPersonId}`)
-        lastPersonId = Math.max(...personIds)
-        return lastPersonId
-        
-    })
+        let existingCards = {}
+            await this.queryDatabase(db,query,(error, data) => {
+                for(const row of data) {
+                    existingCards[row.physid] = row.name
+                    personIds.push(Number(row.id))
+                }
+            })
+        console.log('poszlo doczytanie kart')
+        //return {existingCards, lastPersonId}
+        callback(null,{existingCards, personIds})
     },
 
     raisErr: function raisErr(err){
