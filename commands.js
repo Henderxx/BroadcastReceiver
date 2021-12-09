@@ -9,43 +9,43 @@ module.exports = {
    // existingCards: {},
     readyIntFile: {},
    // lastPersonId: 0,
-
+    queryDatabase: async function queryDatabase(db,query,callback) {
+        db.query(query,(error,data) =>{
+        if(error) return callback(error,null)
+        callback(null,data)
+        })
+    },
     getExistingCards: async function getExistingCards(db, callback) {
         const query = 'select person.id,person.name,card.physid from card join person on person.id = card.personid limit 10'
         let personIds = []
-        let existingCards = {}
+        let existingCards = new Map()
             await this.queryDatabase(db,query,(error,data) => {
-                //console.log(data);
+                if(error) return callback(error,null)
                 for(const row of data) {
-                    existingCards[row.physid] = row.name
+                    existingCards.set(row.physid, row.name )
                     personIds.push(Number(row.id))
                 }
             })
         console.log(`initial odczyt kart`);
-        callback(null,{existingCards,personIds})
-    },
-
-    queryDatabase: async function queryDatabase(db,query,callback) {
-            await db.query(query,(error,results) =>{
-            if(error) return callback(error,null)
-            return callback(null,results)
-        })
+        callback(null,existingCards,personIds)
     },
 
     getMoreCards : async function getMoreCards(db,lastPersonId,callback) {
-        const PersonId = Math.max(...lastPersonId)
-        const query = `select person.id,person.name,card.physid from card join person on person.id = card.personid where person.id > ${PersonId} limit 5`
-        let personIds =[]
-        let existingCards = {}
-            await this.queryDatabase(db,query,(error, data) => {
+        const query = `select person.id,person.name,card.physid from card join person on person.id = card.personid where person.id > ${lastPersonId} limit 5`
+        let foundIds =[]
+        let foundCards = new Map()
+            this.queryDatabase(db,query,(error, data) => {
+                if(error){
+                    return callback(error,null)
+                }
                 for(const row of data) {
-                    existingCards[row.physid] = row.name
-                    personIds.push(Number(row.id))
+                    foundCards.set(row.physid, {'name': row.name, 'id': row.id} )
+                    foundIds.push(Number(row.id))
                 }
             })
         console.log('poszlo doczytanie kart')
         //return {existingCards, lastPersonId}
-        callback(null,{existingCards, personIds})
+        return callback(null,foundCards, foundIds)
     },
 
     raisErr: function raisErr(err){

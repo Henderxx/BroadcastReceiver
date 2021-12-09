@@ -4,8 +4,8 @@ const MCAST_ADDR = '239.255.255.250'
 const dgram = require('dgram')
 const net = require('net')
 const mysql = require('mysql')
-let existingCards = {}
-let lastPersonId = '' || 0
+let existingCards = new Map()
+let lastPersonId = []
 const db = mysql.createConnection({
     host: '192.168.0.26',
     //socketPath: '/run/mysql/mysql.sock',
@@ -35,19 +35,25 @@ localReceiver.on('connection', (socket) => {
         const Txt = data.toString('utf8')
         console.log(`Text --- ${Txt}`)
         try {
-            if(existingCards[Txt]) {
+            if(existingCards.has(Txt)) {
                 console.log(`Jest karta w pamięci`)
-                socket.write(existingCards[Txt])
-                commands.saveDataToLog(existingCards[Txt],'send')
+                console.log(`Ilośc kart w pamięci: ${existingCards.size}`);
+                console.log(`Ilosc wpisow lastpersonId: ${lastPersonId.length}`);
+                //socket.write(existingCards[Txt])
+
+                //commands.saveDataToLog(existingCards[Txt],'send')
             }
             else {
                 console.log(`Nie znaleziono wpisu w pamięci, ponowne odczytywanie bazy`)
                 socket.write(`False`)
                 try {
-                    await commands.getMoreCards(db,lastPersonId,(error,data) => {
-                        existingCards = data.existingCards
-                        lastPersonId = data.personIds
-                    })    
+                    let maxId = 0
+                    if(lastPersonId instanceof Array) {
+                        maxId = Math.max(...lastPersonId)
+                    }
+                    await commands.getMoreCards(db,maxId, addCards)
+                    
+                   
                 } catch (error) {
                     console.log(error);
                 }
@@ -99,10 +105,8 @@ receiver.once('listening', async () =>{
     try {
         commands.readInterfaces()
         commands.goBackupInterfaces()
-        await commands.getExistingCards(db,(error,data) => {
-            existingCards = data.existingCards
-            lastPersonId = data.personIds
-        })
+        await commands.getExistingCards(db, logges)
+        
     } catch (error) {
         console.log(error);
     }
@@ -143,3 +147,22 @@ receiver.on('message',async (msg, rinfo) => {
             break
     }
 })
+
+function addCards(error,foundCards,foundIds) {
+
+//console.log(foundCards);
+console.log(`foundIds: ${foundIds}`);
+}
+
+function logges(error,foundCards,foundIds) {
+    // foundCards.forEach((value) => {
+    //     console.log(`==========`);
+    //     console.log(`value: ${value}`);
+    //     console.log(`==========`);
+    //     //console.log(`key: ${key}`);
+    // })
+    existingCards = map([...existingCards, ...foundCards])
+    console.log(existingCards);
+}
+
+//setInterval(commands.getExistingCards(db,logges),10000)
