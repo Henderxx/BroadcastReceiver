@@ -4,48 +4,49 @@ const logFile = __dirname+'/logs/connections.log'
 const sourceFile = __dirname+'/interfaces'
 const backupFile = __dirname+'/backup/interfaces.bak'
 const { exec }= require('child_process')
+const { writeHeapSnapshot } = require('v8')
 
 module.exports = {
-   // existingCards: {},
     readyIntFile: {},
-   // lastPersonId: 0,
-
-    getExistingCards: async function getExistingCards(db, callback) {
-        const query = 'select person.id,person.name,card.physid from card join person on person.id = card.personid limit 10'
-        let personIds = []
-        let existingCards = {}
-            await this.queryDatabase(db,query,(error,data) => {
-                //console.log(data);
-                for(const row of data) {
-                    existingCards[row.physid] = row.name
-                    personIds.push(Number(row.id))
-                }
-            })
-        console.log(`initial odczyt kart`);
-        callback(null,{existingCards,personIds})
-    },
-
     queryDatabase: async function queryDatabase(db,query,callback) {
-            await db.query(query,(error,results) =>{
-            if(error) return callback(error,null)
-            return callback(null,results)
+        await db.query(query,(error,data) =>{
+        if(error) return callback(error,null)
+        callback(null,data)
         })
     },
 
-    getMoreCards : async function getMoreCards(db,lastPersonId,callback) {
-        const PersonId = Math.max(...lastPersonId)
-        const query = `select person.id,person.name,card.physid from card join person on person.id = card.personid where person.id > ${PersonId} limit 5`
-        let personIds =[]
-        let existingCards = {}
-            await this.queryDatabase(db,query,(error, data) => {
+    getExistingCards:  function getExistingCards(db, callback) {
+        const query = 'select person.id,person.name,card.physid from card join person on person.id = card.personid limit 10'
+        let personIds = []
+        let existingCards = new Map()
+        let exCards = {}   
+            this.queryDatabase(db,query,(error,data) => {
+                if(error){ 
+                    return callback(error,null)
+                }
                 for(const row of data) {
-                    existingCards[row.physid] = row.name
+                    existingCards.set(row.physid, row.name )
+                    exCards[row.physid]= row.name
                     personIds.push(Number(row.id))
                 }
             })
-        console.log('poszlo doczytanie kart')
-        //return {existingCards, lastPersonId}
-        callback(null,{existingCards, personIds})
+        return callback(null,existingCards,personIds)
+    },
+
+    getMoreCards : function getMoreCards(db,lastPersonId,callback) {
+        const query = `select person.id,person.name,card.physid from card join person on person.id = card.personid where person.id > ${lastPersonId} limit 5`
+        let foundIds =[]
+        let foundCards = new Map()
+            this.queryDatabase(db,query,(error, data) => {
+                if(error){
+                    return callback(error,null)
+                }
+                for(const row of data) {
+                    foundCards.set(row.physid, row.name)
+                    foundIds.push(Number(row.id))
+                }
+            })
+        return callback(null,foundCards,foundIds)
     },
 
     raisErr: function raisErr(err){
@@ -63,13 +64,10 @@ module.exports = {
 
         if(direction === 'received') {
             const result = `${year}.${month}.${day}-${HH}:${MM}:${SS} Received Data >> ${data} \r\n`
+          return fs.writeFile(logFile,result,{encoding: 'utf-8','flag': 'a'},this.raisErr)
+        } 
+            const result = `${year}.${month}.${day}-${HH}:${MM}:${SS} Send Data << ${data} \r\n`
             fs.writeFile(logFile,result,{encoding: 'utf-8','flag': 'a'},this.raisErr)
-        }
-        
-        const result = `${year}.${month}.${day}-${HH}:${MM}:${SS} Send Data << ${data} \r\n`
-        fs.writeFile(logFile,result,{encoding: 'utf-8','flag': 'a'},this.raisErr)
-        
-        
     },
 
     goBackupInterfaces: function goBackupInterfaces(){

@@ -4,8 +4,12 @@ const MCAST_ADDR = '239.255.255.250'
 const dgram = require('dgram')
 const net = require('net')
 const mysql = require('mysql')
-let existingCards = {}
-let lastPersonId = '' || 0
+let existingCards = new Map()
+let lastPersonId = []
+let newCards = new Map()
+let newIds = []
+
+
 const db = mysql.createConnection({
     host: '192.168.0.26',
     //socketPath: '/run/mysql/mysql.sock',
@@ -26,36 +30,45 @@ const localReceiver = net.createServer()
 
 localReceiver.on('connection', (socket) => {
     const newClient = `${socket.remoteAddress}:${socket.remotePort}`
-    console.log(`Nowe połączenie: ${newClient}`)
-
+        console.log(`Nowe połączenie: ${newClient}`)
+        
     socket.on('data',async (data) => {
         console.log(data)
         //zapis do pliku czas + otrzymany pakiet
             commands.saveDataToLog(data,'received')
         const Txt = data.toString('utf8')
-        console.log(`Text --- ${Txt}`)
-        try {
-            if(existingCards[Txt]) {
+        aktual(existingCards,newCards,newIds)
+            console.log(`Ilośc kart w pamięci: ${existingCards.size}`);
+            console.log(`Ilosc wpisow lastpersonId: ${lastPersonId.length}`);
+            console.log(`Żądana karta --- ${Txt}`)
+        // console.log(`existing cards =========================`);
+        // console.log(existingCards);
+        // console.log(`personIds =========================`);
+        // console.log(lastPersonId);
+        // console.log(`new cards =========================`);
+        // console.log(newCards);
+            if(existingCards.has(Txt)) {
                 console.log(`Jest karta w pamięci`)
-                socket.write(existingCards[Txt])
-                commands.saveDataToLog(existingCards[Txt],'send')
+                const znalezionaKarta = existingCards.get(Txt)
+                console.log(`**********${znalezionaKarta}**********`);
+                socket.write(znalezionaKarta)
+
+                commands.saveDataToLog(znalezionaKarta,'send')
             }
             else {
                 console.log(`Nie znaleziono wpisu w pamięci, ponowne odczytywanie bazy`)
                 socket.write(`False`)
                 try {
-                    await commands.getMoreCards(db,lastPersonId,(error,data) => {
-                        existingCards = data.existingCards
-                        lastPersonId = data.personIds
-                    })    
+                    let maxId = 0
+                    if(lastPersonId instanceof Array) {
+                        maxId = Math.max(...lastPersonId)
+                    }
+                    commands.getMoreCards(db,maxId, addCards)
+                    
                 } catch (error) {
                     console.log(error);
                 }
             }
-        } catch (error) {
-            console.log(error)
-        }
-        
     })
 
     socket.on('close', () => {
@@ -77,8 +90,6 @@ localReceiver.listen(9000, () =>
 console.log(`server bound`)
 )
 
-
-//let {existingCards, lastPersonId} = commands.getExistingCards(db)
 const receiver = dgram.createSocket({type: 'udp4', reuseAddr: true})
 
 receiver.bind(PORT, () => {
@@ -99,10 +110,8 @@ receiver.once('listening', async () =>{
     try {
         commands.readInterfaces()
         commands.goBackupInterfaces()
-        await commands.getExistingCards(db,(error,data) => {
-            existingCards = data.existingCards
-            lastPersonId = data.personIds
-        })
+        commands.getExistingCards(db, logges)
+        
     } catch (error) {
         console.log(error);
     }
@@ -143,3 +152,30 @@ receiver.on('message',async (msg, rinfo) => {
             break
     }
 })
+
+function addCards(error,foundCards,foundIds) {
+    console.log(`=======Dodawanie nowych kart=======`);
+    newCards = foundCards
+    newIds = foundIds
+return
+}
+
+function logges(error,foundCards,foundIds) {
+    console.log(`=======Odczyt istniejacych kart=======`);
+    existingCards = foundCards
+    lastPersonId = foundIds
+}
+
+function aktual(exCards,neCards,neIds){
+    console.log(`=======aktualizacja pamięci kart=======`)
+    for(let [key, value] of neCards) {
+        if (!exCards.has(key)) {
+            existingCards.set(key, value)
+        }
+    }
+    neIds.forEach(element => {
+        if(!lastPersonId.includes(element)){
+            lastPersonId.push(element)
+        }
+    });
+}
