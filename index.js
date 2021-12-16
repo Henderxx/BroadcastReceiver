@@ -1,5 +1,6 @@
 const commands = require('./commands')
-const PORT = '9000'
+require('dotenv').config()
+const PORT = process.env.RECEIVER_PORT
 const MCAST_ADDR = '239.255.255.250'
 const dgram = require('dgram')
 const net = require('net')
@@ -11,11 +12,11 @@ let newIds = []
 
 
 const db = mysql.createConnection({
-    host: '192.168.0.26',
-    //socketPath: '/run/mysql/mysql.sock',
-    user: 'ifter',
-    password: 'ifter',
-    database: 'sysora'
+    host: process.env.DB_HOST,
+    //socketPath: process.env.DB_SOCKET,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWD,
+    database: process.env.DB_DATABASE
 })
 
 db.connect(function(err){
@@ -86,7 +87,7 @@ localReceiver.on('error', (err) =>{
 })
 
 
-localReceiver.listen(9000, () =>
+localReceiver.listen(PORT, () =>
 console.log(`server bound`)
 )
 
