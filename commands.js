@@ -4,7 +4,6 @@ const logFile = __dirname+'/logs/connections.log'
 const sourceFile = __dirname+'/interfaces'
 const backupFile = __dirname+'/backup/interfaces.bak'
 const { exec }= require('child_process')
-const { writeHeapSnapshot } = require('v8')
 
 module.exports = {
     readyIntFile: {},
